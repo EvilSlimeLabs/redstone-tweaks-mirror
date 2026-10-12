@@ -1,0 +1,44 @@
+# Checks Modrinth once a week for a new release of Redstone Tweaks, and when
+# there is one, commits it unpacked and tags it with its version number.
+# .github/mirror.py does the fetching and checking.
+name: Mirror the newest release
+
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  # to re-enable this workflow's schedule; see the last step
+  actions: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the newest release
+        id: fetch
+        run: python3 .github/mirror.py
+
+      - name: Commit and tag it
+        if: steps.fetch.outputs.version != ''
+        env:
+          VERSION: ${{ steps.fetch.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Redstone Tweaks $VERSION"
+          git tag "$VERSION"
+          git push origin HEAD "refs/tags/$VERSION"
+
+      # GitHub turns a schedule off after sixty days with no commits to a public
+      # repository, and releases come further apart than that. Enabling the
+      # workflow again on every run keeps it on without a commit.
+      - name: Keep the schedule on
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/mirror.yml/enable"
